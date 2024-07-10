@@ -1,0 +1,171 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2639
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 resource "azurerm_availability_set" "aset" \{\
+  name                = "$\{var.name_prefix\}-availset"\
+  location            = var.location\
+  resource_group_name = var.resource_group_name\
+  platform_fault_domain_count  = 2\
+  platform_update_domain_count = 5\
+  managed = true\
+\
+  tags = \{\
+    Assignment     = "CCGC 5502 Automation Assignment"\
+    Name           = var.full_name\
+    ExpirationDate = "2024-12-31"\
+    Environment    = "Learning"\
+  \}\
+\}\
+\
+resource "random_string" "dns_label" \{\
+  for_each = var.vm_names\
+  length   = 5\
+  special  = false\
+  upper    = false\
+\}\
+\
+resource "azurerm_public_ip" "pip" \{\
+  for_each             = var.vm_names\
+  name                 = "$\{each.value\}-pip"\
+  location             = var.location\
+  resource_group_name  = var.resource_group_name\
+  allocation_method    = "Dynamic"\
+  domain_name_label    = "$\{each.value\}-$\{random_string.dns_label[each.key].result\}"\
+\
+  tags = \{\
+    Assignment     = "CCGC 5502 Automation Assignment"\
+    Name           = var.full_name\
+    ExpirationDate = "2024-12-31"\
+    Environment    = "Learning"\
+  \}\
+\}\
+\
+resource "azurerm_network_interface" "nic" \{\
+  for_each             = var.vm_names\
+  name                 = "$\{each.value\}-nic"\
+  location             = var.location\
+  resource_group_name  = var.resource_group_name\
+\
+  ip_configuration \{\
+    name                          = "internal"\
+    subnet_id                     = var.subnet_id\
+    private_ip_address_allocation = "Dynamic"\
+    public_ip_address_id          = azurerm_public_ip.pip[each.key].id\
+  \}\
+\
+  tags = \{\
+    Assignment     = "CCGC 5502 Automation Assignment"\
+    Name           = var.full_name\
+    ExpirationDate = "2024-12-31"\
+    Environment    = "Learning"\
+  \}\
+\}\
+\
+resource "azurerm_virtual_machine" "vm" \{\
+  for_each             = var.vm_names\
+  name                 = each.value\
+  location             = var.location\
+  resource_group_name  = var.resource_group_name\
+  network_interface_ids = [azurerm_network_interface.nic[each.key].id]\
+  availability_set_id  = azurerm_availability_set.aset.id\
+  vm_size              = "Standard_B1ms"\
+\
+  storage_os_disk \{\
+    name              = "$\{each.value\}-osdisk"\
+    caching           = "ReadWrite"\
+    create_option     = "FromImage"\
+    managed_disk_type = "Standard_LRS"\
+  \}\
+\
+  storage_image_reference \{\
+    publisher = "OpenLogic"\
+    offer     = "CentOS"\
+    sku       = "8_2"\
+    version   = "latest"\
+  \}\
+\
+  os_profile \{\
+    computer_name  = each.value\
+    admin_username = var.admin_username\
+    admin_password = var.admin_password\
+  \}\
+\
+  os_profile_linux_config \{\
+    disable_password_authentication = false\
+  \}\
+\
+  boot_diagnostics \{\
+    enabled = true\
+    storage_uri = var.storage_account_uri\
+  \}\
+\
+  tags = \{\
+    Assignment     = "CCGC 5502 Automation Assignment"\
+    Name           = var.full_name\
+    ExpirationDate = "2024-12-31"\
+    Environment    = "Learning"\
+  \}\
+\}\
+\
+resource "azurerm_virtual_machine_extension" "network_watcher" \{\
+  for_each              = var.vm_names\
+  name                  = "networkWatcherAgentLinux"\
+  virtual_machine_id    = azurerm_virtual_machine.vm[each.key].id\
+  publisher             = "Microsoft.Azure.NetworkWatcher"\
+  type                  = "NetworkWatcherAgentLinux"\
+  type_handler_version  = "1.4"\
+\
+  tags = \{\
+    Assignment     = "CCGC 5502 Automation Assignment"\
+    Name           = var.full_name\
+    ExpirationDate = "2024-12-31"\
+    Environment    = "Learning"\
+  \}\
+\}\
+\
+resource "azurerm_virtual_machine_extension" "azure_monitor" \{\
+  for_each              = var.vm_names\
+  name                  = "AzureMonitorLinuxAgent"\
+  virtual_machine_id    = azurerm_virtual_machine.vm[each.key].id\
+  publisher             = "Microsoft.Azure.Monitoring"\
+  type                  = "AzureMonitorLinuxAgent"\
+  type_handler_version  = "1.13"  # Ensure this version is supported\
+\
+  settings = jsonencode(\{\
+    workspaceId = var.workspace_id \
+  \})\
+\
+  protected_settings = jsonencode(\{\
+    workspaceKey = var.workspace_key  \
+  \})\
+\
+  tags = \{\
+    Assignment     = "CCGC 5502 Automation Assignment"\
+    Name           = var.full_name\
+    ExpirationDate = "2024-12-31"\
+    Environment    = "Learning"\
+  \}\
+\}\
+\
+resource "null_resource" "vm_hostname" \{\
+  for_each = var.vm_names\
+\
+  provisioner "remote-exec" \{\
+    connection \{\
+      type        = "ssh"\
+      user        = var.admin_username\
+      password    = var.admin_password\
+      host        = each.value\
+      # OR use private_key instead of password if SSH key authentication is used\
+      # private_key = file("~/.ssh/id_rsa")\
+    \}\
+\
+    inline = [\
+      "hostnamectl set-hostname $\{each.key\}"\
+    ]\
+  \}\
+\}}

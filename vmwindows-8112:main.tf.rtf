@@ -1,0 +1,146 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2639
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 resource "azurerm_availability_set" "avset" \{\
+  name                = "$\{var.name_prefix\}-avset"\
+  location            = var.location\
+  resource_group_name = var.resource_group_name\
+  managed             = true\
+\
+  tags = \{\
+    Assignment     = "CCGC 5502 Automation Assignment"\
+    Name           = var.full_name\
+    ExpirationDate = "2024-12-31"\
+    Environment    = "Learning"\
+  \}\
+\}\
+\
+resource "azurerm_network_interface" "nic" \{\
+  count               = var.vm_count\
+  name                = "$\{var.name_prefix\}-nic-$\{count.index\}"\
+  location            = var.location\
+  resource_group_name = var.resource_group_name\
+\
+  ip_configuration \{\
+    name                          = "internal"\
+    subnet_id                     = var.subnet_id\
+    private_ip_address_allocation = "Dynamic"\
+    public_ip_address_id          = azurerm_public_ip.public_ip[count.index].id\
+  \}\
+\
+  tags = \{\
+    Assignment     = "CCGC 5502 Automation Assignment"\
+    Name           = var.full_name\
+    ExpirationDate = "2024-12-31"\
+    Environment    = "Learning"\
+  \}\
+\}\
+\
+resource "random_string" "dns_label" \{\
+  count  = var.vm_count\
+  length = 8\
+  special = false\
+  upper = false\
+\}\
+\
+resource "azurerm_public_ip" "public_ip" \{\
+  count               = var.vm_count\
+  name                = "$\{var.name_prefix\}-pip-$\{count.index\}"\
+  location            = var.location\
+  resource_group_name = var.resource_group_name\
+  allocation_method   = "Dynamic"\
+  domain_name_label   = "$\{var.name_prefix\}-$\{count.index\}-$\{random_string.dns_label[count.index].result\}"\
+\
+  tags = \{\
+    Assignment     = "CCGC 5502 Automation Assignment"\
+    Name           = var.full_name\
+    ExpirationDate = "2024-12-31"\
+    Environment    = "Learning"\
+  \}\
+\}\
+\
+resource "azurerm_virtual_machine" "vm" \{\
+  count                 = var.vm_count\
+  name                  = "$\{var.name_prefix\}-vm-$\{count.index\}"\
+  location              = var.location\
+  resource_group_name   = var.resource_group_name\
+  availability_set_id   = azurerm_availability_set.avset.id\
+  network_interface_ids = [azurerm_network_interface.nic[count.index].id]\
+  vm_size               = "Standard_B1ms"\
+\
+  storage_image_reference \{\
+    publisher = "MicrosoftWindowsServer"\
+    offer     = "WindowsServer"\
+    sku       = "2016-Datacenter"\
+    version   = "latest"\
+  \}\
+\
+  storage_os_disk \{\
+    name              = "$\{var.name_prefix\}-osdisk-$\{count.index\}"\
+    caching           = "ReadWrite"\
+    create_option     = "FromImage"\
+    managed_disk_type = "Standard_LRS"\
+  \}\
+\
+  boot_diagnostics \{\
+    enabled     = true\
+    storage_uri = var.boot_diagnostics_storage_uri\
+  \}\
+\
+  os_profile \{\
+    computer_name  = "$\{var.name_prefix\}-vm-$\{count.index\}"\
+    admin_username = var.admin_username\
+    admin_password = var.admin_password\
+  \}\
+\
+  os_profile_windows_config \{\
+    provision_vm_agent = true\
+  \}\
+\
+  tags = \{\
+    Assignment     = "CCGC 5502 Automation Assignment"\
+    Name           = var.full_name\
+    ExpirationDate = "2024-12-31"\
+    Environment    = "Learning"\
+  \}\
+\}\
+\
+resource "azurerm_virtual_machine_extension" "antimalware" \{\
+  count               = var.vm_count\
+  name                = "IaaSAntimalware"\
+  virtual_machine_id  = azurerm_virtual_machine.vm[count.index].id\
+  publisher           = "Microsoft.Azure.Security"\
+  type                = "IaaSAntimalware"\
+  type_handler_version = "1.5"\
+\
+  settings = <<SETTINGS\
+  \{\
+    "AntimalwareEnabled": true,\
+    "Exclusions": \{\
+      "Extensions": ".txt;.log",\
+      "Paths": "D:\\\\IISlogs;C:\\\\customAppLogs",\
+      "Processes": "mssense.exe"\
+    \},\
+    "RealtimeProtectionEnabled": true,\
+    "ScheduledScanSettings": \{\
+      "isEnabled": true,\
+      "scanType": "Quick",\
+      "day": "7",\
+      "time": "120"\
+    \}\
+  \}\
+  SETTINGS\
+\}\
+\
+resource "azurerm_virtual_machine_extension" "network_watcher" \{\
+  count               = var.vm_count\
+  name                = "NetworkWatcherAgent"\
+  virtual_machine_id  = azurerm_virtual_machine.vm[count.index].id\
+  publisher           = "Microsoft.Azure.NetworkWatcher"\
+  type                = "NetworkWatcherAgentWindows"\
+  type_handler_version = "1.4"\
+\}}
